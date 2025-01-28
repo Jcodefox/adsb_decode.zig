@@ -1,6 +1,23 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const MessageType = struct {
+    const IDENT_FIRST: u5 = 1;
+    const IDENT_LAST: u5 = 4;
+    const SURFACE_POS_FIRST: u5 = 5;
+    const SURFACE_POS_LAST: u5 = 8;
+    const AIR_POS_FIRST: u5 = 9;
+    const AIR_POS_LAST: u5 = 18;
+    const AIRBORNE_VELOCITIES: u5 = 19;
+    const AIR_POS_GNSS_FIRST: u5 = 20;
+    const AIR_POS_GNSS_LAST: u5 = 22;
+    const RESERVED_FIRST: u5 = 23;
+    const RESERVED_LAST: u5 = 27;
+    const AIRCRAFT_STATUS: u5 = 28;
+    const TARGET_STATE_AND_STATUS_INFO: u5 = 29;
+    const AIRCRAFT_OPERATION_STATUS: u5 = 31;
+};
+
 const WakeVortexCategory = enum { RESERVED, NO_CATEGORY_INFO, GROUND_OBSTRUCTION, SURFACE_EMERGENCY_VEHICLE, SURFACE_SERVICE_VEHICLE, GLIDER, LIGHTER_THAN_AIR, SKYDIVER, ULTRALIGHT, UAV, TRANSATMOSPHERIC_VEHICLE, LIGHT, MEDIUM1, MEDIUM2, HIGH_VORTEX_AIRCRAFT, HEAVY, HIGH_PERFORMANCE, ROTORCRAFT };
 
 const IdentMessage = packed struct {
@@ -304,14 +321,14 @@ pub fn print_message_details(frame: Frame, plane: Plane, output: anytype) !void 
     try output.print("{x:06}: {s}: ", .{ plane.icao, plane.callsign });
     const message: UnknownMessage = @bitCast(frame.message);
     switch (message.tc) {
-        1...4 => {
+        MessageType.IDENT_FIRST...MessageType.IDENT_LAST => {
             try output.print("Ident: {s} | ", .{plane.callsign});
             try output.print("{}\n", .{plane.wvc});
         },
-        5...8 => {
+        MessageType.SURFACE_POS_FIRST...MessageType.SURFACE_POS_LAST => {
             try output.print("Surface Position\n", .{});
         },
-        9...18 => {
+        MessageType.AIR_POS_FIRST...MessageType.AIR_POS_LAST => {
             // zig fmt: off
             const coords: Coordinates = get_plane_coordinates(plane);
             try output.print(
@@ -320,22 +337,22 @@ pub fn print_message_details(frame: Frame, plane: Plane, output: anytype) !void 
                 );
             // zig fmt: on
         },
-        19 => {
+        MessageType.AIRBORNE_VELOCITIES => {
             try output.print("Airborne Velocities\n", .{});
         },
-        20...22 => {
+        MessageType.AIR_POS_GNSS_FIRST...MessageType.AIR_POS_GNSS_LAST => {
             try output.print("Airborne Position w/ GNSS\n", .{});
         },
-        23...27 => {
+        MessageType.RESERVED_FIRST...MessageType.RESERVED_LAST => {
             try output.print("RESERVED\n", .{});
         },
-        28 => {
+        MessageType.AIRCRAFT_STATUS => {
             try output.print("Aircraft Status\n", .{});
         },
-        29 => {
+        MessageType.TARGET_STATE_AND_STATUS_INFO => {
             try output.print("Target state and status info\n", .{});
         },
-        31 => {
+        MessageType.AIRCRAFT_OPERATION_STATUS => {
             try output.print("Aircraft operation status\n", .{});
         },
         else => {
@@ -377,20 +394,20 @@ pub fn convert_frame_to_plane(frame: Frame, planes_table: std.AutoHashMap(u24, P
 
     plane.ts = std.time.timestamp();
     switch (message.tc) {
-        1...4 => { // Ident Message
+        MessageType.IDENT_FIRST...MessageType.IDENT_LAST => {
             plane = apply_ident_message(@bitCast(frame.message), plane);
         },
-        5...8 => {}, // Surface Position Message
-        9...18 => { // Air Position Message
+        MessageType.SURFACE_POS_FIRST...MessageType.SURFACE_POS_LAST => {},
+        MessageType.AIR_POS_FIRST...MessageType.AIR_POS_LAST => {
             plane = apply_air_pos_message(@bitCast(frame.message), plane);
         },
-        19 => {}, // Airborne Velocities Message
-        20...22 => {}, // Airborne Position w/ GNSS Message
-        23...27 => {}, // RESERVED Message
-        28 => {}, // Aircraft Status Message
-        29 => {}, // Target State And Status Info Message
-        31 => {}, // Aircraft Operation Status Message
-        else => {}, // Unknown Message
+        MessageType.AIRBORNE_VELOCITIES => {},
+        MessageType.AIR_POS_GNSS_FIRST...MessageType.AIR_POS_GNSS_LAST => {},
+        MessageType.RESERVED_FIRST...MessageType.RESERVED_LAST => {},
+        MessageType.AIRCRAFT_STATUS => {},
+        MessageType.TARGET_STATE_AND_STATUS_INFO => {},
+        MessageType.AIRCRAFT_OPERATION_STATUS => {},
+        else => {},
     }
 
     return plane;
