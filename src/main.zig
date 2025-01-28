@@ -344,11 +344,11 @@ pub fn print_message_details(message: UnknownMessage, plane: Plane, output: anyt
 
 pub fn main() !void {
     const verbose: bool = false;
+
     const stdin = std.io.getStdIn().reader();
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
-    var bad_msgs: usize = 0;
 
     try stdout.print("Starting adsb.zig...\n", .{});
     try bw.flush();
@@ -386,29 +386,11 @@ pub fn main() !void {
             const val = table.get(frame_crc);
             if (val) |v| {
                 frame_raw = frame_raw ^ v;
-                if (verbose) {
-                    if (bad_msgs > 0) {
-                        try stdout.print("\n", .{});
-                    }
-                    try stdout.print("-: ", .{});
-                }
             } else {
-                if (verbose) {
-                    try stdout.print("x", .{});
-                    try bw.flush();
-                }
-                bad_msgs += 1;
                 continue;
             }
-        } else {
-            if (verbose) {
-                if (bad_msgs > 0) {
-                    try stdout.print("\n", .{});
-                }
-                try stdout.print("✓: ", .{});
-            }
         }
-        bad_msgs = 0;
+
         const frame: Frame = @bitCast(frame_raw);
 
         var plane: Plane = Plane{
@@ -478,9 +460,6 @@ pub fn main() !void {
             try display_plane(p.*, std.time.timestamp(), stdout, owner);
         }
         try bw.flush();
-    }
-    if (bad_msgs > 0) {
-        try stdout.print("\n", .{});
     }
     try stdout.print("Goodbye\n", .{});
     try bw.flush();
