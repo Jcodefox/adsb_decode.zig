@@ -454,6 +454,8 @@ pub fn main() !void {
     var table = try gen_crc24_error_table(gpa);
     defer table.deinit();
     try stdout.print(" Done.\n", .{});
+
+    try stdout.print("Waiting for ADSB frames.\n", .{});
     try bw.flush();
 
     var planes_table = std.AutoHashMap(u24, Plane).init(gpa);
