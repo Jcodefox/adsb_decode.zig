@@ -300,7 +300,9 @@ pub fn display_plane(plane: Plane, timestamp: i64, output: anytype, owner: [64]u
     // zig fmt: on
 }
 
-pub fn print_message_details(message: UnknownMessage, plane: Plane, output: anytype) !void {
+pub fn print_message_details(frame: Frame, plane: Plane, output: anytype) !void {
+    try output.print("{x:06}: {s}: ", .{ plane.icao, plane.callsign });
+    const message: UnknownMessage = @bitCast(frame.message);
     switch (message.tc) {
         1...4 => {
             try output.print("Ident: {s} | ", .{plane.callsign});
@@ -342,31 +344,99 @@ pub fn print_message_details(message: UnknownMessage, plane: Plane, output: anyt
     }
 }
 
-pub fn main() !void {
-    const verbose: bool = false;
+pub fn convert_frame_to_plane(frame: Frame, planes_table: std.AutoHashMap(u24, Plane)) Plane {
+    var plane: Plane = Plane{
+        .icao = frame.icao,
+        .callsign = [8]u8{
+            '#',
+            '#',
+            '#',
+            '#',
+            '#',
+            '#',
+            '#',
+            '#',
+        },
+        .lat_even = 0,
+        .lon_even = 0,
+        .lat_odd = 0,
+        .lon_odd = 0,
+        .alt = 0,
+        .has_frame_0 = false,
+        .has_frame_1 = false,
+        .ts = 0,
+        .wvc = .NO_CATEGORY_INFO,
+    };
 
+    const plane_optional = planes_table.get(frame.icao);
+    if (plane_optional) |p| {
+        plane = p;
+    }
+
+    const message: UnknownMessage = @bitCast(frame.message);
+
+    plane.ts = std.time.timestamp();
+    switch (message.tc) {
+        1...4 => { // Ident Message
+            plane = apply_ident_message(@bitCast(frame.message), plane);
+        },
+        5...8 => {}, // Surface Position Message
+        9...18 => { // Air Position Message
+            plane = apply_air_pos_message(@bitCast(frame.message), plane);
+        },
+        19 => {}, // Airborne Velocities Message
+        20...22 => {}, // Airborne Position w/ GNSS Message
+        23...27 => {}, // RESERVED Message
+        28 => {}, // Aircraft Status Message
+        29 => {}, // Target State And Status Info Message
+        31 => {}, // Aircraft Operation Status Message
+        else => {}, // Unknown Message
+    }
+
+    return plane;
+}
+
+pub fn display_all_planes(planes_table: std.AutoHashMap(u24, Plane), faa_database_table: std.AutoHashMap(u24, FAAPlane), output: anytype) !void {
+    var plane_iter = planes_table.valueIterator();
+    try output.print("=============\n", .{});
+    while (plane_iter.next()) |p| {
+        if (std.time.timestamp() - p.ts >= 60) {
+            continue;
+        }
+        const faa_entry = faa_database_table.get(p.icao);
+        var owner: [64]u8 = std.mem.zeroes([64]u8);
+        if (faa_entry) |entry| {
+            owner = entry.owner;
+        }
+        try display_plane(p.*, std.time.timestamp(), output, owner);
+    }
+}
+
+pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    try stdout.print("Starting adsb.zig...\n", .{});
-    try bw.flush();
+    const verbose: bool = false;
 
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = general_purpose_allocator.allocator();
 
-    try stdout.print("Loading FAA registration database file...\n", .{});
+    try stdout.print("Starting adsb.zig...\n", .{});
+    try bw.flush();
+
+    try stdout.print("Loading FAA registration database file...", .{});
     try bw.flush();
     var faa_database_table = try load_faa_database("/home/fox/Documents/faa_plane_database/MASTER.txt", gpa);
     defer faa_database_table.deinit();
-    try stdout.print("Done.\n", .{});
+    try stdout.print(" Done.\n", .{});
 
-    try stdout.print("Generating crc error correction table...\n", .{});
+    try stdout.print("Generating crc error correction table...", .{});
     try bw.flush();
     var table = try gen_crc24_error_table(gpa);
     defer table.deinit();
-    try stdout.print("Done.\n", .{});
+    try stdout.print(" Done.\n", .{});
     try bw.flush();
 
     var planes_table = std.AutoHashMap(u24, Plane).init(gpa);
@@ -378,7 +448,6 @@ pub fn main() !void {
             break;
         };
         const parsed_input: []u8 = input[1..29];
-        //try stdout.print("{s}\n", .{parsed_input});
 
         var frame_raw: u112 = try std.fmt.parseInt(u112, parsed_input, 16);
         const frame_crc: u112 = crc24(frame_raw);
@@ -392,73 +461,13 @@ pub fn main() !void {
         }
 
         const frame: Frame = @bitCast(frame_raw);
-
-        var plane: Plane = Plane{
-            .icao = frame.icao,
-            .callsign = [8]u8{
-                '#',
-                '#',
-                '#',
-                '#',
-                '#',
-                '#',
-                '#',
-                '#',
-            },
-            .lat_even = 0,
-            .lon_even = 0,
-            .lat_odd = 0,
-            .lon_odd = 0,
-            .alt = 0,
-            .has_frame_0 = false,
-            .has_frame_1 = false,
-            .ts = 0,
-            .wvc = .NO_CATEGORY_INFO,
-        };
-        const plane_optional = planes_table.get(frame.icao);
-        if (plane_optional) |p| {
-            plane = p;
+        const plane: Plane = convert_frame_to_plane(frame, planes_table);
+        if (verbose) {
+            try print_message_details(frame, plane, stdout);
         }
 
-        const msg: UnknownMessage = @bitCast(frame.message);
-        if (verbose) {
-            try stdout.print("{x:06}: {s}: ", .{ plane.icao, plane.callsign });
-        }
-        plane.ts = std.time.timestamp();
-        switch (msg.tc) {
-            1...4 => { // Ident Message
-                plane = apply_ident_message(@bitCast(frame.message), plane);
-            },
-            5...8 => {}, // Surface Position Message
-            9...18 => { // Air Position Message
-                plane = apply_air_pos_message(@bitCast(frame.message), plane);
-            },
-            19 => {}, // Airborne Velocities Message
-            20...22 => {}, // Airborne Position w/ GNSS Message
-            23...27 => {}, // RESERVED Message
-            28 => {}, // Aircraft Status Message
-            29 => {}, // Target State And Status Info Message
-            31 => {}, // Aircraft Operation Status Message
-            else => {}, // Unknown Message
-        }
-        if (verbose) {
-            try print_message_details(msg, plane, stdout);
-        }
-        //try stdout.print("{}\n", .{msg});
         try planes_table.put(frame.icao, plane);
-        var plane_iter = planes_table.valueIterator();
-        try stdout.print("=============\n", .{});
-        while (plane_iter.next()) |p| {
-            if (std.time.timestamp() - p.ts >= 60) {
-                continue;
-            }
-            const faa_entry = faa_database_table.get(p.icao);
-            var owner: [64]u8 = std.mem.zeroes([64]u8);
-            if (faa_entry) |entry| {
-                owner = entry.owner;
-            }
-            try display_plane(p.*, std.time.timestamp(), stdout, owner);
-        }
+        try display_all_planes(planes_table, faa_database_table, stdout);
         try bw.flush();
     }
     try stdout.print("Goodbye\n", .{});
