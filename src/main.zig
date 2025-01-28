@@ -219,10 +219,17 @@ fn calc_lon(lat: f64, lon_cpr_even: u17, lon_cpr_odd: u17, is_odd: bool) f64 {
         offset = 1.0;
     }
     const n: f64 = @max(calc_nl(lat - offset), 1.0);
+    var result: f64 = 0.0;
     if (is_odd) {
-        return 360.0 / n * ((@mod(m, n) + @as(f64, @floatFromInt(lon_cpr_odd)) / 131072.0));
+        result = 360.0 / n * ((@mod(m, n) + @as(f64, @floatFromInt(lon_cpr_odd)) / 131072.0));
     } else {
-        return 360.0 / n * ((@mod(m, n) + @as(f64, @floatFromInt(lon_cpr_even)) / 131072.0));
+        result = 360.0 / n * ((@mod(m, n) + @as(f64, @floatFromInt(lon_cpr_even)) / 131072.0));
+    }
+
+    if (result >= 180.0) {
+        return result - 360.0;
+    } else {
+        return result;
     }
 }
 
@@ -311,7 +318,7 @@ pub fn display_plane(plane: Plane, timestamp: i64, output: anytype, owner: [64]u
     // zig fmt: off
     try output.print(
         "Lat: {d:.8}, Lon: {d:.8}, Alt: {d:5} | Last heard {d:3}s ago ",
-        .{ coords.lat, coords.lon - 360.0, plane.alt, timestamp - plane.ts }
+        .{ coords.lat, coords.lon - 0.0, plane.alt, timestamp - plane.ts }
         );
     try output.print("| {s} | {}\n", .{ owner, plane.wvc });
     // zig fmt: on
@@ -333,7 +340,7 @@ pub fn print_message_details(frame: Frame, plane: Plane, output: anytype) !void 
             const coords: Coordinates = get_plane_coordinates(plane);
             try output.print(
                 "AirPos Baro: {d:.8}, {d:.8} | {d:5}\n",
-                .{ coords.lat, coords.lon - 360.0, plane.alt }
+                .{ coords.lat, coords.lon - 0.0, plane.alt }
                 );
             // zig fmt: on
         },
