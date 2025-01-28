@@ -317,10 +317,15 @@ pub fn display_plane(plane: Plane, timestamp: i64, output: anytype, owner: [64]u
     const coords: Coordinates = get_plane_coordinates(plane);
     // zig fmt: off
     try output.print(
-        "Lat: {d:.8}, Lon: {d:.8}, Alt: {d:5} | Last heard {d:3}s ago ",
+        "Lat: {d:13.8}, Lon: {d:13.8}, Alt: {d:5} | Last heard {d:3}s ago ",
         .{ coords.lat, coords.lon - 0.0, plane.alt, timestamp - plane.ts }
         );
-    try output.print("| {s} | {}\n", .{ owner, plane.wvc });
+    if (owner[0] == 0) {
+        try output.print("| {s} | ", .{ "                                                  " }); 
+    } else {
+        try output.print("| {s} | ", .{ owner });
+    }
+    try output.print("{}\n", .{ plane.wvc });
     // zig fmt: on
 }
 
