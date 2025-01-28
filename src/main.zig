@@ -288,19 +288,16 @@ pub fn apply_air_pos_message(air_pos_message: AirPosMessage, plane: Plane) Plane
     return updated_plane;
 }
 
-pub fn display_plane(plane: *Plane, timestamp: i64, output: anytype, owner: [64]u8) !void {
+pub fn display_plane(plane: Plane, timestamp: i64, output: anytype, owner: [64]u8) !void {
     try output.print("{x:06}: {s}: ", .{ plane.icao, plane.callsign });
-    if (plane.has_frame_0 and plane.has_frame_1) {
-        //const my_lat: f64 = 0.0;
-        //const my_lon: f64 = 0.0 + 360.0;
-        const lat: f64 = calc_lat(plane.lat_even, plane.lat_odd, false);
-        const lon: f64 = calc_lon(lat, plane.lon_even, plane.lon_odd, false);
-        //const dist: f64 = std.math.sqrt(std.math.pow(f64, my_lat - lat, 2.0) + std.math.pow(f64, my_lon - lon, 2.0));
-        try output.print("Lat: {d:.8}, Lon: {d:.8}, Alt: {d:5} | Last heard {d:3}s ago ", .{ lat, lon - 360.0, plane.alt, timestamp - plane.ts });
-    } else {
-        try output.print("Not yet valid lon/lat!             , Alt: {d:5} | Last heard {d:3}s ago ", .{ plane.alt, timestamp - plane.ts });
-    }
+    const coords: Coordinates = get_plane_coordinates(plane);
+    // zig fmt: off
+    try output.print(
+        "Lat: {d:.8}, Lon: {d:.8}, Alt: {d:5} | Last heard {d:3}s ago ",
+        .{ coords.lat, coords.lon - 360.0, plane.alt, timestamp - plane.ts }
+        );
     try output.print("| {s} | {}\n", .{ owner, plane.wvc });
+    // zig fmt: on
 }
 
 pub fn print_message_details(message: UnknownMessage, plane: Plane, output: anytype) !void {
@@ -478,7 +475,7 @@ pub fn main() !void {
             if (faa_entry) |entry| {
                 owner = entry.owner;
             }
-            try display_plane(p, std.time.timestamp(), stdout, owner);
+            try display_plane(p.*, std.time.timestamp(), stdout, owner);
         }
         try bw.flush();
     }
