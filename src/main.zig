@@ -296,6 +296,9 @@ pub fn apply_air_pos_message(air_pos_message: AirPosMessage, plane: Plane) Plane
     const q_bit: bool = (air_pos_message.alt >> 4 & 1) == 1;
     _ = q_bit; // TODO: Handle q_bit
     // TODO: If q_bit is false, handle gray code.
+    // TODO: Implement surveillance status
+    // TODO: Implement GNSS altitude
+    // TODO: Figure out what single antenna flag is and implement it
     var actual_alt: u32 = @intCast(((air_pos_message.alt >> 1) & 0b11111110000) | (air_pos_message.alt & 0b1111));
     actual_alt = (actual_alt * 25) - 1000;
     updated_plane.alt = actual_alt;
@@ -307,6 +310,23 @@ pub fn apply_air_pos_message(air_pos_message: AirPosMessage, plane: Plane) Plane
     } else {
         updated_plane.lat_odd = air_pos_message.lat_cpr;
         updated_plane.lon_odd = air_pos_message.lon_cpr;
+        updated_plane.has_frame_1 = true;
+    }
+    return updated_plane;
+}
+
+pub fn apply_surface_pos_message(surface_pos_message: SurPosMessage, plane: Plane) Plane {
+    var updated_plane: Plane = plane;
+    // TODO: Use move field to implement ground speed
+    // TODO: Implement ground track (plane facing direction) with TRK field if S field is 1
+
+    if (surface_pos_message.f == 0) {
+        updated_plane.lat_even = surface_pos_message.lat_cpr;
+        updated_plane.lon_even = surface_pos_message.lon_cpr;
+        updated_plane.has_frame_0 = true;
+    } else {
+        updated_plane.lat_odd = surface_pos_message.lat_cpr;
+        updated_plane.lon_odd = surface_pos_message.lon_cpr;
         updated_plane.has_frame_1 = true;
     }
     return updated_plane;
