@@ -1,4 +1,6 @@
 const std = @import("std");
+const faa = @import("faa_database.zig");
+const crc = @import("crc.zig");
 const Allocator = std.mem.Allocator;
 
 const MessageType = struct {
@@ -108,92 +110,10 @@ const Plane = struct {
     wvc: WakeVortexCategory,
 };
 
-const FAAPlane = struct {
-    icao: u24,
-    owner: [64]u8,
-};
-
 const Coordinates = struct {
     lat: f64,
     lon: f64,
 };
-
-fn load_faa_database(absolute_path: []const u8, allocator: Allocator) !std.AutoHashMap(u24, FAAPlane) {
-    var faa_database_table = std.AutoHashMap(u24, FAAPlane).init(allocator);
-
-    var file = try std.fs.openFileAbsolute(absolute_path, .{});
-    defer file.close();
-
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-
-    var buf: [1024]u8 = undefined;
-    var first_line: bool = true;
-    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-        if (first_line) {
-            first_line = false;
-            continue;
-        }
-        var it = std.mem.splitSequence(u8, line, ",");
-        _ = it.first();
-
-        // Skip the next 5
-        var j: u8 = 0;
-        while (j < 5) : (j += 1) {
-            _ = it.next().?;
-        }
-
-        const next = it.next().?;
-        var owner: [64]u8 = std.mem.zeroes([64]u8);
-        for (0.., next[0..@min(64, next.len)]) |i, elem| {
-            owner[i] = elem;
-        }
-
-        // Skip the next 26
-        j = 0;
-        while (j < 26) : (j += 1) {
-            _ = it.next().?;
-        }
-
-        const icao: u24 = try std.fmt.parseInt(u24, it.next().?[0..6], 16);
-        const faaPlane: FAAPlane = FAAPlane{
-            .icao = icao,
-            .owner = owner,
-        };
-        try faa_database_table.put(icao, faaPlane);
-    }
-
-    return faa_database_table;
-}
-
-fn crc24(data: u112) u112 {
-    var result: u112 = data;
-    const generator: u112 = 0x1fff409;
-    for (24..112) |i| {
-        const index: u7 = 111 - (@as(u7, @intCast(i)) - 24);
-        if (result >> index & 1 != 0) {
-            result = result ^ (generator << index - 24);
-        }
-    }
-    return result;
-}
-
-// TODO: Make this be able to check for more than one error bit.
-fn gen_crc24_error_table(allocator: Allocator) !std.AutoHashMap(u112, u112) {
-    var table = std.AutoHashMap(u112, u112).init(allocator);
-    var check_error: u112 = 0;
-
-    for (0..112) |i| {
-        const index: u7 = 111 - @as(u7, @intCast(i));
-        const one: u112 = 1;
-        check_error = one << index;
-        const syndrome: u112 = crc24(check_error);
-
-        try table.putNoClobber(syndrome, one << index);
-    }
-
-    return table;
-}
 
 fn calc_lat(lat_cpr_even_raw: u17, lat_cpr_odd_raw: u17, is_odd: bool) f64 {
     const lat_cpr_even: f64 = @as(f64, @floatFromInt(lat_cpr_even_raw)) / 131072.0;
@@ -466,7 +386,7 @@ pub fn convert_frame_to_plane(frame: Frame, planes_table: std.AutoHashMap(u24, P
     return plane;
 }
 
-pub fn display_all_planes(planes_table: std.AutoHashMap(u24, Plane), faa_database_table: std.AutoHashMap(u24, FAAPlane), output: anytype) !void {
+pub fn display_all_planes(planes_table: std.AutoHashMap(u24, Plane), faa_database_table: std.AutoHashMap(u24, faa.FAAPlane), output: anytype) !void {
     var plane_iter = planes_table.valueIterator();
     try output.print("=============\n", .{});
     while (plane_iter.next()) |p| {
@@ -498,13 +418,13 @@ pub fn main() !void {
 
     try stdout.print("Loading FAA registration database file...", .{});
     try bw.flush();
-    var faa_database_table = try load_faa_database("/home/fox/Documents/faa_plane_database/MASTER.txt", gpa);
+    var faa_database_table = try faa.load_faa_database("/home/fox/Documents/faa_plane_database/MASTER.txt", gpa);
     defer faa_database_table.deinit();
     try stdout.print(" Done.\n", .{});
 
     try stdout.print("Generating crc error correction table...", .{});
     try bw.flush();
-    var table = try gen_crc24_error_table(gpa);
+    var table = try crc.gen_crc24_error_table(gpa);
     defer table.deinit();
     try stdout.print(" Done.\n", .{});
 
@@ -522,7 +442,7 @@ pub fn main() !void {
         const parsed_input: []u8 = input[1..29];
 
         var frame_raw: u112 = try std.fmt.parseInt(u112, parsed_input, 16);
-        const frame_crc: u112 = crc24(frame_raw);
+        const frame_crc: u112 = crc.crc24(frame_raw);
         if (frame_crc != 0) {
             const val = table.get(frame_crc);
             if (val) |v| {
