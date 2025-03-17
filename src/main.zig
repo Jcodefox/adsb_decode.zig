@@ -16,15 +16,27 @@ pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = general_purpose_allocator.allocator();
 
+    try stdout.print("{s}\n", .{std.os.argv});
+
     // Do all the loading bits
     try stdout.print("Starting adsb.zig...\n", .{});
     try bw.flush();
 
-    try stdout.print("Loading FAA registration database file...", .{});
-    try bw.flush();
-    var faa_database_table = try faa.load_faa_database("/home/fox/Documents/faa_plane_database/MASTER.txt", gpa);
+    // The first parameter the user passes into adsb_decode.zig will be read
+    // as the FAA MASTER.txt plane database.
+
+    // TODO: Use command line flags instead
+    // TODO: Sanitize command line arguments
+    var faa_database_table: std.AutoHashMap(u24, faa.FAAPlane) = undefined;
+    if (std.os.argv.len > 1) {
+        try stdout.print("Loading FAA registration database file...", .{});
+        try bw.flush();
+        faa_database_table = try faa.load_faa_database(std.os.argv[1][0..std.mem.len(std.os.argv[1])], gpa);
+        try stdout.print(" Done.\n", .{});
+    } else {
+        faa_database_table = std.AutoHashMap(u24, faa.FAAPlane).init(gpa);
+    }
     defer faa_database_table.deinit();
-    try stdout.print(" Done.\n", .{});
 
     try stdout.print("Generating crc error correction table...", .{});
     try bw.flush();
