@@ -104,6 +104,7 @@ pub const Plane = struct {
     alt: u32,
     has_frame_0: bool,
     has_frame_1: bool,
+    speed: f16,
     ts: i64,
     wvc: WakeVortexCategory,
 };
@@ -256,7 +257,20 @@ pub fn apply_air_pos_message(air_pos_message: AirPosMessage, plane: Plane) Plane
 
 pub fn apply_surface_pos_message(surface_pos_message: SurPosMessage, plane: Plane) Plane {
     var updated_plane: Plane = plane;
-    // TODO: Use move field to implement ground speed
+
+    const mov_float: f16 = surface_pos_message.mov;
+    plane.speed = switch (surface_pos_message.mov) {
+        0 => -1.0,
+        1 => 0.0,
+        2...8 => (mov_float - 2.0) * 0.125 + 0.125,
+        9...12 => (mov_float - 9.0) * 0.25 + 1.0,
+        13...38 => (mov_float - 13.0) * 0.5 + 2.0,
+        39...93 => (mov_float - 39.0) * 1.0 + 15.0,
+        94...108 => (mov_float - 94.0) * 2.0 + 70.0,
+        109...123 => (mov_float - 109.0) * 5.0 + 100.0,
+        124 => 175.0,
+        125...127 => -1.0,
+    };
     // TODO: Implement ground track (plane facing direction) with TRK field if S field is 1
 
     if (surface_pos_message.f == 0) {
@@ -291,6 +305,7 @@ pub fn convert_frame_to_plane(frame: Frame, planes_table: std.AutoHashMap(u24, P
         .alt = 0,
         .has_frame_0 = false,
         .has_frame_1 = false,
+        .speed = -1.0,
         .ts = 0,
         .wvc = .NO_CATEGORY_INFO,
     };
