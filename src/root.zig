@@ -105,6 +105,8 @@ pub const Plane = struct {
     has_frame_0: bool,
     has_frame_1: bool,
     speed: f16,
+    track: f16,
+    track_valid: bool,
     ts: i64,
     wvc: WakeVortexCategory,
 };
@@ -271,7 +273,13 @@ pub fn apply_surface_pos_message(surface_pos_message: SurPosMessage, plane: Plan
         124 => 175.0,
         125...127 => -1.0,
     };
-    // TODO: Implement ground track (plane facing direction) with TRK field if S field is 1
+
+    plane.track_valid = surface_pos_message.s == 1;
+    if (plane.track_valid) {
+        plane.track = 2.8125 * surface_pos_message.trk;
+    } else {
+        plane.track = 0.0;
+    }
 
     if (surface_pos_message.f == 0) {
         updated_plane.lat_even = surface_pos_message.lat_cpr;
@@ -306,6 +314,8 @@ pub fn convert_frame_to_plane(frame: Frame, planes_table: std.AutoHashMap(u24, P
         .has_frame_0 = false,
         .has_frame_1 = false,
         .speed = -1.0,
+        .track = 0.0,
+        .track_valid = false,
         .ts = 0,
         .wvc = .NO_CATEGORY_INFO,
     };
