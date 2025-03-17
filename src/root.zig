@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const MessageType = struct {
+pub const MessageType = struct {
     const IDENT_FIRST: u5 = 1;
     const IDENT_LAST: u5 = 4;
     const SURFACE_POS_FIRST: u5 = 5;
@@ -19,7 +19,7 @@ const MessageType = struct {
 };
 
 // zig fmt: off
-const WakeVortexCategory = enum {
+pub const WakeVortexCategory = enum {
     RESERVED,
     NO_CATEGORY_INFO,
     GROUND_OBSTRUCTION,
@@ -41,7 +41,7 @@ const WakeVortexCategory = enum {
 };
 // zig fmt: on
 
-const IdentMessage = packed struct {
+pub const IdentMessage = packed struct {
     c8: u6,
     c7: u6,
     c6: u6,
@@ -53,7 +53,7 @@ const IdentMessage = packed struct {
     ca: u3,
     tc: u5,
 };
-const SurPosMessage = packed struct {
+pub const SurPosMessage = packed struct {
     lon_cpr: u17,
     lat_cpr: u17,
     f: u1,
@@ -63,7 +63,7 @@ const SurPosMessage = packed struct {
     mov: u7,
     tc: u5,
 };
-const AirPosMessage = packed struct {
+pub const AirPosMessage = packed struct {
     lon_cpr: u17,
     lat_cpr: u17,
     f: u1,
@@ -73,20 +73,20 @@ const AirPosMessage = packed struct {
     ss: u2,
     tc: u5,
 };
-const AirVelMessage = packed struct {
+pub const AirVelMessage = packed struct {
     junk: u51,
     tc: u5, // TODO: fill out
 };
-const OpStatusMessage = packed struct {
+pub const OpStatusMessage = packed struct {
     junk: u51,
     tc: u5, // TODO: fill out
 };
-const UnknownMessage = packed struct {
+pub const UnknownMessage = packed struct {
     junk: u51,
     tc: u5,
 };
 
-const Frame = packed struct {
+pub const Frame = packed struct {
     pi: u24,
     message: u56,
     icao: u24,
@@ -94,7 +94,7 @@ const Frame = packed struct {
     df: u5,
 };
 
-const Plane = struct {
+pub const Plane = struct {
     icao: u24,
     callsign: [8]u8,
     lat_even: u17,
@@ -108,7 +108,7 @@ const Plane = struct {
     wvc: WakeVortexCategory,
 };
 
-const Coordinates = struct {
+pub const Coordinates = struct {
     lat: f64,
     lon: f64,
 };
