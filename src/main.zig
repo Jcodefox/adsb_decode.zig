@@ -16,7 +16,7 @@ pub fn main() !void {
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = general_purpose_allocator.allocator();
 
-    try stdout.print("{s}\n", .{std.os.argv});
+    try stdout.print("OS.argv: {s}\n", .{std.os.argv});
 
     // Do all the loading bits
     try stdout.print("Starting adsb.zig...\n", .{});
