@@ -6,21 +6,26 @@ const adsb_debug = @import("debug_display.zig");
 const Allocator = std.mem.Allocator;
 
 pub fn main() !void {
-    const stdin = std.io.getStdIn().reader();
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    var stdin_buffer: [1024]u8 = undefined;
+    var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
+    const stdin = &stdin_reader.interface;
+    
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     const verbose: bool = false;
 
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = general_purpose_allocator.allocator();
 
-    try stdout.print("OS.argv: {s}\n", .{std.os.argv});
+    for (std.os.argv) |arg| {
+        try stdout.print("OS.argv: {s}\n", .{arg});
+    }
 
     // Do all the loading bits
     try stdout.print("Starting adsb.zig...\n", .{});
-    try bw.flush();
+    try stdout.flush();
 
     // The first parameter the user passes into adsb_decode.zig will be read
     // as the FAA MASTER.txt plane database.
@@ -30,7 +35,7 @@ pub fn main() !void {
     var faa_database_table: std.AutoHashMap(u24, faa.FAAPlane) = undefined;
     if (std.os.argv.len > 1) {
         try stdout.print("Loading FAA registration database file...", .{});
-        try bw.flush();
+        try stdout.flush();
         faa_database_table = try faa.load_faa_database(std.os.argv[1][0..std.mem.len(std.os.argv[1])], gpa);
         try stdout.print(" Done.\n", .{});
     } else {
@@ -39,25 +44,29 @@ pub fn main() !void {
     defer faa_database_table.deinit();
 
     try stdout.print("Generating crc error correction table...", .{});
-    try bw.flush();
+    try stdout.flush();
     var table = try crc.gen_crc24_error_table(gpa);
     defer table.deinit();
     try stdout.print(" Done.\n", .{});
 
     try stdout.print("Waiting for ADSB frames.\n", .{});
-    try bw.flush();
+    try stdout.flush();
 
     var planes_table = std.AutoHashMap(u24, adsb.Plane).init(gpa);
     defer planes_table.deinit();
+    
+    var input = std.Io.Writer.Allocating.init(gpa);
+    defer input.deinit();
 
     // Main loop
     while (true) {
+        input.clearRetainingCapacity();
         // Load hexadecimal input from stdin
-        var input: [32]u8 = std.mem.zeroes([32]u8);
-        _ = stdin.readUntilDelimiter(&input, '\n') catch {
-            break;
+        _ = stdin.streamDelimiter(&input.writer, '\n') catch |err| {
+            if (err == error.EndOfStream) break else return err;
         };
-        const parsed_input: []u8 = input[1..29];
+        _ = stdin.toss(1);
+        const parsed_input: []u8 = input.written()[1..29];
 
         // Error check and correct
         var frame_raw: u112 = try std.fmt.parseInt(u112, parsed_input, 16);
@@ -81,8 +90,8 @@ pub fn main() !void {
         // Update table and display
         try planes_table.put(frame.icao, plane);
         try adsb_debug.display_all_planes(planes_table, faa_database_table, stdout);
-        try bw.flush();
+        try stdout.flush();
     }
     try stdout.print("Goodbye\n", .{});
-    try bw.flush();
+    try stdout.flush();
 }

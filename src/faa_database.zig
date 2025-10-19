@@ -9,21 +9,34 @@ pub const FAAPlane = struct {
 pub fn load_faa_database(absolute_path: []const u8, allocator: Allocator) !std.AutoHashMap(u24, FAAPlane) {
     var faa_database_table = std.AutoHashMap(u24, FAAPlane).init(allocator);
 
+    var buf: [1024]u8 = undefined;
+    
     var file = try std.fs.openFileAbsolute(absolute_path, .{});
     defer file.close();
+    var file_reader: std.fs.File.Reader = file.reader(&buf);
+    
+    const reader = &file_reader.interface;
+    
+    var line = std.Io.Writer.Allocating.init(allocator);
+    defer line.deinit();
 
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-
-    var buf: [1024]u8 = undefined;
     var first_line: bool = true;
-    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+    
+    while (true){
+        _ = reader.streamDelimiter(&line.writer, '\n') catch |err| {
+            if (err == error.EndOfStream) break else return err;
+        };
+        _ = reader.toss(1);
+        
         if (first_line) {
+            line.clearRetainingCapacity();
             first_line = false;
             continue;
         }
-        var it = std.mem.splitSequence(u8, line, ",");
+        var it = std.mem.splitSequence(u8, line.written(), ",");
         _ = it.first();
+        
+        line.clearRetainingCapacity();
 
         // Skip the next 5
         var j: u8 = 0;
@@ -43,7 +56,8 @@ pub fn load_faa_database(absolute_path: []const u8, allocator: Allocator) !std.A
             _ = it.next().?;
         }
 
-        const icao: u24 = try std.fmt.parseInt(u24, it.next().?[0..6], 16);
+        const word = it.next().?;
+        const icao: u24 = try std.fmt.parseInt(u24, word[0..6], 16);
         const faaPlane: FAAPlane = FAAPlane{
             .icao = icao,
             .owner = owner,
